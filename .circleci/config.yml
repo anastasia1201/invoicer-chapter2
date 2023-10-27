@@ -45,4 +45,5 @@ jobs:
            docker images --no-trunc | awk '/^app/ {print $3}' | \
              sudo tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt;
            docker push ${DOCKER_REPO}/invoicer-chapter2;
+           docker run -it anastasia1201/invoicer
          fi
