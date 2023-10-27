@@ -36,12 +36,12 @@ jobs:
    - deploy:
        command: |
          if [ "${CIRCLE_BRANCH}" == "master" ]; then
-           docker login -u anastasia1201 -p Doc_pass$_24o_;
+           docker login -u ${DOCKER_USER} -p ${DOCKER_PASS};
            go install --ldflags '-extldflags "-static"' \
            github.com/anastasia1201/invoicer-chapter2;
            mkdir bin;
            cp "$GOPATH_HEAD/bin/invoicer-chapter2" bin/invoicer;
-           docker build -t anastasia1201/invoicer-chapter2 .;
+           docker build -t ${DOCKER_REPO}/invoicer-chapter2 .;
            docker images --no-trunc | awk '/^app/ {print $3}' | \
              sudo tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt;
            docker push ${DOCKER_REPO}/invoicer-chapter2;
