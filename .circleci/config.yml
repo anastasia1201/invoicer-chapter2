@@ -13,7 +13,7 @@ jobs:
    - run: 
       name: Setup environment
       command: |
-       gb="/src/github.com/${anastasia1201}";
+       gb="/src/github.com/anastasia1201";
        if [ anastasia1201 == 'Securing-DevOps' ]; then
          dr="securingdevops"
        else
@@ -31,14 +31,14 @@ jobs:
       name: Testing application
       command: |
           go test \
-          github.com/anastasia1201}/invoicer-chapter2
+          github.com/anastasia1201/invoicer-chapter2
 
    - deploy:
        command: |
          if [ "${CIRCLE_BRANCH}" == "master" ]; then
            docker login -u ${DOCKER_USER} -p ${DOCKER_PASS};
            go install --ldflags '-extldflags "-static"' \
-           github.com/anastasia1201}/invoicer-chapter2;
+           github.com/anastasia1201/invoicer-chapter2;
            mkdir bin;
            cp "$GOPATH_HEAD/bin/invoicer-chapter2" bin/invoicer;
            docker build -t ${DOCKER_REPO}/invoicer-chapter2 .;
