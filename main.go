@@ -44,6 +44,8 @@ type invoicer struct {
 }
 
 func main() {
+	escaped := html.EscapeString("<script type='text/javascript'>alert('xss');</script>")
+	fmt.Println(escaped)
 	var (
 		iv  invoicer
 		err error
@@ -270,4 +272,32 @@ func getVersion(w http.ResponseWriter, r *http.Request) {
 "commit": "%s",
 "build": "https://circleci.com/gh/Securing-DevOps/invoicer/"
 }`, version, commit)))
+}
+func httpError(w http.ResponseWriter, errorCode int, errorMessage string, args ...interface{}) {
+	log.Printf("%d: %s", errorCode, fmt.Sprintf(errorMessage, args...))
+	http.Error(w, fmt.Sprintf(errorMessage, args...), errorCode)
+	return
+}
+
+var CSRFKey []byte
+
+func makeCSRFToken() string {
+	msg := make([]byte, 32)
+	rand.Read(msg)
+	mac := hmac.New(sha256.New, CSRFKey)
+	mac.Write(msg)
+	return base64.StdEncoding.EncodeToString(msg) + `$` + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func checkCSRFToken(token string) bool {
+	mac := hmac.New(sha256.New, CSRFKey)
+	tokenParts := strings.Split(token, "$")
+	if len(tokenParts) != 2 {
+		return false
+	}
+	msg, _ := base64.StdEncoding.DecodeString(tokenParts[0])
+	messageMAC, _ := base64.StdEncoding.DecodeString(tokenParts[1])
+	mac.Write([]byte(msg))
+	expectedMAC := mac.Sum(nil)
+	return hmac.Equal(messageMAC, expectedMAC)
 }
