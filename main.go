@@ -44,6 +44,7 @@ type invoicer struct {
 }
 
 func main() {
+	httpError()
 	escaped := html.EscapeString("<script type='text/javascript'>alert('xss');</script>")
 	fmt.Println(escaped)
 	var (
