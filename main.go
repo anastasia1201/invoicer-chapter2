@@ -8,14 +8,20 @@ package main
 //go:generate ./version.sh
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
@@ -23,6 +29,7 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/wader/gormstore"
 	"go.mozilla.org/mozlog"
+	
 )
 
 func init() {
@@ -58,9 +65,22 @@ func main() {
 	if err != nil {
 		panic("failed to connect database")
 	}
-
+	// initialize the session store
+	iv.store = gormstore.New(db, CSRFKey)
+	quit := make(chan struct{})
+	go iv.store.PeriodicCleanup(1*time.Hour, quit)
+	
 	iv.db = db
 	iv.db.AutoMigrate(&Invoice{}, &Charge{})
+
+	iv.db.LogMode(true)
+
+	//initialize CSRF Token
+	CSRFKey = make([]byte, 128)
+	_, err = rand.Read(CSRFKey)
+	if err != nil {
+		log.Fatal("error initializing CSRF Key:", err)
+	}
 
 	// register routes
 	r := mux.NewRouter()
@@ -151,6 +171,7 @@ func (iv *invoicer) postInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	iv.db.Create(&i1)
 	iv.db.Last(&i1)
+	log.Printf("%+v\n", i1)
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(fmt.Sprintf("created invoice %d", i1.ID)))
 	al := appLog{Message: fmt.Sprintf("created invoice %d", i1.ID), Action: "post-invoice"}
@@ -187,6 +208,11 @@ func (iv *invoicer) putInvoice(w http.ResponseWriter, r *http.Request) {
 
 func (iv *invoicer) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
+	if !checkCSRFToken(r.Header.Get("X-CSRF-Token")) {
+		w.WriteHeader(http.StatusNotAcceptable)
+		w.Write([]byte("Invalid CSRF Token"))
+		return
+	}
 	log.Println("deleting invoice", vars["id"])
 	var i1 Invoice
 	id, _ := strconv.Atoi(vars["id"])
@@ -200,7 +226,9 @@ func (iv *invoicer) deleteInvoice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (iv *invoicer) getIndex(w http.ResponseWriter, r *http.Request) {
-	log.Println("serving index page")
+	w.Header().Add("Content-Security-Policy", "default-src 'self'; child-src 'self;")
+	w.Header().Add("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Add("X-Content-Type-Options", "nosniff")
 	w.Write([]byte(`
 <!DOCTYPE html>
 <html>
@@ -219,6 +247,7 @@ func (iv *invoicer) getIndex(w http.ResponseWriter, r *http.Request) {
         <form id="invoiceGetter" method="GET">
             <label>ID :</label>
             <input id="invoiceid" type="text" />
+	    <input type="hidden" name="CSRFToken" value="` + makeCSRFToken() + `">
             <input type="submit" />
         </form>
         <form id="invoiceDeleter" method="DELETE">
